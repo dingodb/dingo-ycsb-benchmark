@@ -205,6 +205,7 @@ LICENSE file.
     -->
     <module>rocksdb</module>
     <module>redis</module>
+    <module>dingodb</module>
   </modules>
 
   <build>
