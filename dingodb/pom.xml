@@ -51,11 +51,6 @@ LICENSE file.
       <classifier>all</classifier>
     </dependency>
     <dependency>
-      <groupId>redis.clients</groupId>
-      <artifactId>jedis</artifactId>
-      <version>${redis.version}</version>
-    </dependency>
-    <dependency>
       <groupId>site.ycsb</groupId>
       <artifactId>core</artifactId>
       <version>${project.version}</version>

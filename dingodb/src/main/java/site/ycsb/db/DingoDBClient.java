@@ -24,25 +24,14 @@
 
 package site.ycsb.db;
 
+import io.dingodb.sdk.client.DingoClient;
 import site.ycsb.ByteIterator;
 import site.ycsb.DB;
 import site.ycsb.DBException;
 import site.ycsb.Status;
-import site.ycsb.StringByteIterator;
-import redis.clients.jedis.BasicCommands;
-import redis.clients.jedis.HostAndPort;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisCluster;
-import redis.clients.jedis.JedisCommands;
-import redis.clients.jedis.Protocol;
 
-import java.io.Closeable;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
@@ -54,55 +43,57 @@ import java.util.Vector;
  */
 public class DingoDBClient extends DB {
 
-  private JedisCommands jedis;
+  /** The name of the property for the number of fields in a record. */
+  public static final String FIELD_COUNT_PROPERTY = "fieldcount";
 
-  public static final String HOST_PROPERTY = "redis.host";
-  public static final String PORT_PROPERTY = "redis.port";
-  public static final String PASSWORD_PROPERTY = "redis.password";
-  public static final String CLUSTER_PROPERTY = "redis.cluster";
-  public static final String TIMEOUT_PROPERTY = "redis.timeout";
+  /** Default number of fields in a record. */
+  public static final String FIELD_COUNT_PROPERTY_DEFAULT = "10";
 
-  public static final String INDEX_KEY = "_indices";
+  /** Representing a NULL value. */
+  public static final String NULL_VALUE = "NULL";
+
+  /** The primary key in the user table. */
+  public static final String PRIMARY_KEY = "DINGO_KEY";
+
+  /** The field name prefix in the table. */
+  public static final String COLUMN_PREFIX = "FIELD";
+
+  private DingoClient   dingoClient;
+
+  /**
+   * command for table such as create or drop table.
+   */
+  public static final String DINGO_TBL_COMMAND = "command";
+
+  /**
+   * create table.
+   */
+  public static final String DINGO_TBL_COMMAND_DEFAULT = "create";
+
+  /**
+   * drop table.
+   */
+  public static final String DINGO_TBL_COMMAND_DROP= "drop";
+
+  /**
+   * coordinator list for operation.
+   */
+  public static final String COORDINATOR_HOST = "coordinator.host";
+
 
   public void init() throws DBException {
     Properties props = getProperties();
-    int port;
+    String coordinatorList = props.getProperty(COORDINATOR_HOST);
 
-    String portString = props.getProperty(PORT_PROPERTY);
-    if (portString != null) {
-      port = Integer.parseInt(portString);
-    } else {
-      port = Protocol.DEFAULT_PORT;
-    }
-    String host = props.getProperty(HOST_PROPERTY);
-
-    boolean clusterEnabled = Boolean.parseBoolean(props.getProperty(CLUSTER_PROPERTY));
-    if (clusterEnabled) {
-      Set<HostAndPort> jedisClusterNodes = new HashSet<>();
-      jedisClusterNodes.add(new HostAndPort(host, port));
-      jedis = new JedisCluster(jedisClusterNodes);
-    } else {
-      String redisTimeout = props.getProperty(TIMEOUT_PROPERTY);
-      if (redisTimeout != null){
-        jedis = new Jedis(host, port, Integer.parseInt(redisTimeout));
-      } else {
-        jedis = new Jedis(host, port);
-      }
-      ((Jedis) jedis).connect();
-    }
-
-    String password = props.getProperty(PASSWORD_PROPERTY);
-    if (password != null) {
-      ((BasicCommands) jedis).auth(password);
+    dingoClient = new DingoClient(coordinatorList);
+    boolean isOK = dingoClient.open();
+    if (!isOK) {
+      throw new DBException("Init connection to coordinator:" + coordinatorList + " failed");
     }
   }
 
   public void cleanup() throws DBException {
-    try {
-      ((Closeable) jedis).close();
-    } catch (IOException e) {
-      throw new DBException("Closing connection failed.");
-    }
+    dingoClient.close();
   }
 
   /*
@@ -115,68 +106,41 @@ public class DingoDBClient extends DB {
     return key.hashCode();
   }
 
-  // XXX jedis.select(int index) to switch to `table`
 
   @Override
-  public Status read(String table, String key, Set<String> fields,
-      Map<String, ByteIterator> result) {
-    if (fields == null) {
-      StringByteIterator.putAllAsByteIterators(result, jedis.hgetAll(key));
-    } else {
-      String[] fieldArray =
-          (String[]) fields.toArray(new String[fields.size()]);
-      List<String> values = jedis.hmget(key, fieldArray);
-
-      Iterator<String> fieldIterator = fields.iterator();
-      Iterator<String> valueIterator = values.iterator();
-
-      while (fieldIterator.hasNext() && valueIterator.hasNext()) {
-        result.put(fieldIterator.next(),
-            new StringByteIterator(valueIterator.next()));
-      }
-      assert !fieldIterator.hasNext() && !valueIterator.hasNext();
-    }
+  public Status read(String table,
+                     String key,
+                     Set<String> fields,
+                     Map<String, ByteIterator> result) {
     return result.isEmpty() ? Status.ERROR : Status.OK;
   }
 
   @Override
-  public Status insert(String table, String key,
-      Map<String, ByteIterator> values) {
-    if (jedis.hmset(key, StringByteIterator.getStringMap(values))
-        .equals("OK")) {
-      jedis.zadd(INDEX_KEY, hash(key), key);
-      return Status.OK;
-    }
+  public Status insert(String table,
+                       String key,
+                       Map<String, ByteIterator> values) {
     return Status.ERROR;
   }
 
   @Override
-  public Status delete(String table, String key) {
-    return jedis.del(key) == 0 && jedis.zrem(INDEX_KEY, key) == 0 ? Status.ERROR
-        : Status.OK;
-  }
-
-  @Override
-  public Status update(String table, String key,
-      Map<String, ByteIterator> values) {
-    return jedis.hmset(key, StringByteIterator.getStringMap(values))
-        .equals("OK") ? Status.OK : Status.ERROR;
-  }
-
-  @Override
-  public Status scan(String table, String startkey, int recordcount,
-      Set<String> fields, Vector<HashMap<String, ByteIterator>> result) {
-    Set<String> keys = jedis.zrangeByScore(INDEX_KEY, hash(startkey),
-        Double.POSITIVE_INFINITY, 0, recordcount);
-
-    HashMap<String, ByteIterator> values;
-    for (String key : keys) {
-      values = new HashMap<String, ByteIterator>();
-      read(table, key, fields, values);
-      result.add(values);
-    }
-
+  public Status delete(String table,
+                       String key) {
     return Status.OK;
   }
 
+  @Override
+  public Status update(String table,
+                       String key,
+                       Map<String, ByteIterator> values) {
+    return Status.OK;
+  }
+
+  @Override
+  public Status scan(String table,
+                     String startkey,
+                     int recordcount,
+                     Set<String> fields,
+                     Vector<HashMap<String, ByteIterator>> result) {
+    return Status.OK;
+  }
 }

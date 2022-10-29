@@ -17,9 +17,9 @@ LICENSE file.
 
 ## Quick Start
 
-This section describes how to run YCSB on Redis. 
+This section describes how to run YCSB on [DingoDB](https://github.com/dingodb/dingo). 
 
-### 1. Start Redis
+### 1. Start DingoCluster
 
 ### 2. Install Java and Maven
 
@@ -31,7 +31,31 @@ Git clone YCSB and compile:
     cd YCSB
     mvn -pl site.ycsb:dingodb-binding -am clean package
 
-### 4. Provide Redis Connection Parameters
+
+### 4. Create Table
+
+#### 4.1 Copy package to Dingo cluster
+
+***ycsb-dingodb-binding-*-SNAPSHOT.tar.gz*** will be found in directory ***dingodb/target***.
+
+
+#### 4.2 Create table in Dingo cluster
+
+- extract `tar.gz` package
+
+- execute command to create table
+```shell
+java -cp "lib/*" site.ycsb.db.DingoDBTableCommand -c command=create -p coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181 -n bench1 -f 10
+```
+
+#### 4.3 Other commands
+
+If you want to drop table, you can use command as follows:
+```shell
+java -cp "lib/*" site.ycsb.db.DingoDBCreateTable -c command=drop -p coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181 -n bench1
+```
+
+### 5. Provide DingoDB Connection Parameters
     
 Set host, port, password, and cluster mode in the workload you plan to run. 
 
@@ -47,7 +71,7 @@ Or, you can set configs with the shell command, EG:
 
     ./bin/ycsb load redis -s -P workloads/workloada -p "redis.host=127.0.0.1" -p "redis.port=6379" > outputLoad.txt
 
-### 5. Load data and run tests
+### 6. Load data and run tests
 
 Load the data:
 
