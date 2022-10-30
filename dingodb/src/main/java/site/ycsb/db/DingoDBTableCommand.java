@@ -156,24 +156,24 @@ public final class DingoDBTableCommand {
     ColumnDefinition primaryColumn = ColumnDefinition.getInstance(
         DingoDBClient.PRIMARY_KEY,
         defaultTypeName,
-        defaultTypeName,
         null,
-        200,
+        null,
+        null,
         true,
         true,
         generateRandomString(20));
     tableDef.addColumn(primaryColumn);
 
-    for (int i = 1; i <= columnCnt; i++) {
+    for (int i = 0; i < columnCnt; i++) {
       ColumnDefinition column = ColumnDefinition.getInstance(
           DingoDBClient.COLUMN_PREFIX + i,
           defaultTypeName,
-          defaultTypeName,
           null,
-          200,
-          true,
+          null,
+          null,
           false,
-          generateRandomString(20));
+          false,
+          null);
       tableDef.addColumn(column);
     }
 

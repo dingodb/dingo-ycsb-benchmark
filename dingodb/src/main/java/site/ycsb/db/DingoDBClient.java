@@ -24,12 +24,16 @@
 
 package site.ycsb.db;
 
+import io.dingodb.common.table.ColumnDefinition;
+import io.dingodb.common.table.TableDefinition;
 import io.dingodb.sdk.client.DingoClient;
 import site.ycsb.ByteIterator;
 import site.ycsb.DB;
 import site.ycsb.DBException;
 import site.ycsb.Status;
+import site.ycsb.StringByteIterator;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -53,7 +57,7 @@ public class DingoDBClient extends DB {
   public static final String NULL_VALUE = "NULL";
 
   /** The primary key in the user table. */
-  public static final String PRIMARY_KEY = "DINGO_KEY";
+  public static final String PRIMARY_KEY = "YCSB_KEY";
 
   /** The field name prefix in the table. */
   public static final String COLUMN_PREFIX = "FIELD";
@@ -80,67 +84,162 @@ public class DingoDBClient extends DB {
    */
   public static final String COORDINATOR_HOST = "coordinator.host";
 
+  public static final String DINGO_TABLE_DEFAULT = "usertable";
+  public static final String DINGO_TABLE = "dingo.table";
+
+  private static TableDefinition tableDefinition;
+  private String defaultTableName;
 
   public void init() throws DBException {
     Properties props = getProperties();
     String coordinatorList = props.getProperty(COORDINATOR_HOST);
+    String tableName = props.getProperty(DINGO_TABLE, DINGO_TABLE_DEFAULT);
+    defaultTableName = tableName;
 
     dingoClient = new DingoClient(coordinatorList);
     boolean isOK = dingoClient.open();
     if (!isOK) {
       throw new DBException("Init connection to coordinator:" + coordinatorList + " failed");
     }
+    tableDefinition = dingoClient.getTableDefinition(tableName);
+    System.out.println("=======Init Input Table===================>>>>" + tableName);
   }
 
   public void cleanup() throws DBException {
     dingoClient.close();
   }
 
-  /*
-   * Calculate a hash for a key to store it in an index. The actual return value
-   * of this function is not interesting -- it primarily needs to be fast and
-   * scattered along the whole space of doubles. In a real world scenario one
-   * would probably use the ASCII values of the keys.
-   */
-  private double hash(String key) {
-    return key.hashCode();
-  }
-
-
   @Override
-  public Status read(String table,
+  public Status read(String tableName,
                      String key,
                      Set<String> fields,
                      Map<String, ByteIterator> result) {
-    return result.isEmpty() ? Status.ERROR : Status.OK;
-  }
+    Object[] keyArray = new Object[1];
+    keyArray[0] = key;
+    Object[] values = dingoClient.get(defaultTableName, keyArray);
 
-  @Override
-  public Status insert(String table,
-                       String key,
-                       Map<String, ByteIterator> values) {
+    try {
+      Map<String, String> resultInMap = convertRecord2HashMap(dingoClient, defaultTableName, values);
+      if (fields == null) {
+        StringByteIterator.putAllAsByteIterators(result, resultInMap);
+      } else {
+        Map<String, String> subResultMap = new HashMap<>();
+        for (String columnName: fields) {
+          subResultMap.put(columnName, resultInMap.get(columnName.toLowerCase()));
+        }
+        StringByteIterator.putAllAsByteIterators(result, subResultMap);
+      }
+      return Status.OK;
+    } catch (RuntimeException ex) {
+      System.out.println("Catch exception:" + ex.toString());
+    }
     return Status.ERROR;
   }
 
   @Override
-  public Status delete(String table,
-                       String key) {
-    return Status.OK;
-  }
-
-  @Override
-  public Status update(String table,
+  public Status insert(String tableName,
                        String key,
                        Map<String, ByteIterator> values) {
+    Map<String, String> inputValues = StringByteIterator.getStringMap(values);
+    Object[] resultArray = new Object[values.size() + 1];
+
+    try {
+      TableDefinition tableDef = getTableDefinition(dingoClient, defaultTableName);
+      int index = 0;
+      for (ColumnDefinition column : tableDef.getColumns()) {
+        String columnName = column.getName().toLowerCase();
+        String columnValue = inputValues.get(columnName);
+        if (columnValue == null) {
+          columnValue = inputValues.get(columnName.toUpperCase());
+        }
+
+        if (columnName.equalsIgnoreCase(PRIMARY_KEY)) {
+          columnValue = key;
+        }
+        resultArray[index] = columnValue;
+        index++;
+      }
+
+      boolean isOK = dingoClient.insert(defaultTableName, resultArray);
+      if (!isOK) {
+        System.out.println("Insert record using key:[" + key + "], failed");
+      }
+    } catch (Exception ex) {
+      System.out.println("Insert catch exception:" + ex.toString());
+      ex.printStackTrace();
+      return Status.ERROR;
+    }
     return Status.OK;
   }
 
   @Override
-  public Status scan(String table,
+  public Status delete(String tableName,
+                       String key) {
+    boolean isOK = dingoClient.delete(defaultTableName, Arrays.asList(key).toArray());
+    if (!isOK) {
+      System.out.println("delete record key:" + key + " failed");
+      return Status.ERROR;
+    }
+    return Status.OK;
+  }
+
+  @Override
+  public Status update(String tableName,
+                       String key,
+                       Map<String, ByteIterator> values) {
+    Map<String, String> inputValues = StringByteIterator.getStringMap(values);
+
+    Object[] originRecord = dingoClient.get(defaultTableName, Arrays.asList(key).toArray());
+    for (Map.Entry<String, String> entry: inputValues.entrySet()) {
+      int index = tableDefinition.getColumnIndex(entry.getKey());
+      if (index != -1) {
+        originRecord[index] = entry.getValue();
+      }
+    }
+
+    boolean isOK =  dingoClient.insert(defaultTableName, originRecord);
+    if (isOK) {
+      return Status.OK;
+    }
+
+    return Status.ERROR;
+  }
+
+  @Override
+  public Status scan(String tableName,
                      String startkey,
                      int recordcount,
                      Set<String> fields,
                      Vector<HashMap<String, ByteIterator>> result) {
     return Status.OK;
+  }
+
+  private static Map<String, String> convertRecord2HashMap(DingoClient client,
+                                                           String tableName,
+                                                           Object[] columnValues) throws RuntimeException {
+    TableDefinition tblDef = getTableDefinition(client, tableName);
+
+    if (tblDef == null || tblDef.getColumnsCount() == 0) {
+      System.out.println("Invalid table definition:" + (tblDef == null ? "null" : "OK"));
+      throw new RuntimeException("Table definition or Values is null");
+    }
+
+    Map<String, String> result = new HashMap<>();
+    for (int i = 0; i < columnValues.length; i++) {
+      String columnName = tblDef.getColumn(i).getName();
+      result.put(columnName.toLowerCase(), columnValues[i].toString());
+    }
+    return result;
+  }
+
+  private static TableDefinition getTableDefinition(DingoClient client, String tableName) {
+
+    /**
+     * as the benchmark is on a single table, so the tableDefinition is only one.
+     */
+    if (tableDefinition == null) {
+      tableDefinition = client.getTableDefinition(tableName);
+    }
+    return tableDefinition;
   }
 }

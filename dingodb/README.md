@@ -53,7 +53,7 @@ java -cp "lib/*" site.ycsb.db.DingoDBTableCommand -c command=create -p coordinat
 
 If you want to drop table, you can use command as follows:
 ```shell
-java -cp "lib/*" site.ycsb.db.DingoDBCreateTable -c command=drop -p coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181 -n bench1
+java -cp "lib/*" site.ycsb.db.DingoDBTableCommand -c command=drop -p coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181 -n bench1
 ```
 
 ### 5. Provide DingoDB Connection Parameters
@@ -81,5 +81,5 @@ Load the data:
 Run the workload test:
 
 ```shell
-./bin/ycsb run dingodb -s -P workloads/workloada -p "coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181" -p "dingo.table=usertable"
+   ./bin/ycsb run dingodb -s -P workloads/workloada -p "coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181" -p "dingo.table=usertable"
 ```
