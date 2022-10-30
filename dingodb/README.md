@@ -27,10 +27,11 @@ This section describes how to run YCSB on [DingoDB](https://github.com/dingodb/d
 
 Git clone YCSB and compile:
 
+```shell
     git clone http://github.com/brianfrankcooper/YCSB.git
     cd YCSB
     mvn -pl site.ycsb:dingodb-binding -am clean package
-
+```
 
 ### 4. Create Table
 
@@ -57,27 +58,28 @@ java -cp "lib/*" site.ycsb.db.DingoDBCreateTable -c command=drop -p coordinator.
 
 ### 5. Provide DingoDB Connection Parameters
     
-Set host, port, password, and cluster mode in the workload you plan to run. 
+Set coordinator host list and table name  in the workload you plan to run. 
 
-- `redis.host`
-- `redis.port`
-- `redis.password`
-  * Don't set the password if redis auth is disabled.
-- `redis.cluster`
-  * Set the cluster parameter to `true` if redis cluster mode is enabled.
-  * Default is `false`.
+- `coordinator.host`
+- `dingo.table`
+  * The table created in [4.2](README.md).
 
 Or, you can set configs with the shell command, EG:
 
-    ./bin/ycsb load redis -s -P workloads/workloada -p "redis.host=127.0.0.1" -p "redis.port=6379" > outputLoad.txt
+```shell
+    ./bin/ycsb load dingodb -s -P workloads/workloada -p "coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181" -p "dingo.table=usertable" > outputLoad.txt
+```
 
-### 6. Load data and run tests
+### 6. Load data and run tests 
 
 Load the data:
 
-    ./bin/ycsb load redis -s -P workloads/workloada > outputLoad.txt
+```shell
+    ./bin/ycsb load dingodb -s -P workloads/workloada -p "coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181" -p "dingo.table=usertable" > outputLoad.txt
+```
 
 Run the workload test:
 
-    ./bin/ycsb run redis -s -P workloads/workloada > outputRun.txt
-
+```shell
+./bin/ycsb run dingodb -s -P workloads/workloada -p "coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181" -p "dingo.table=usertable"
+```
