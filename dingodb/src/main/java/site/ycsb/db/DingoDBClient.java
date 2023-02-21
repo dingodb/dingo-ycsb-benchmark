@@ -24,21 +24,17 @@
 
 package site.ycsb.db;
 
+import io.dingodb.common.DingoOpResult;
 import io.dingodb.common.table.ColumnDefinition;
 import io.dingodb.common.table.TableDefinition;
 import io.dingodb.sdk.client.DingoClient;
-import site.ycsb.ByteIterator;
-import site.ycsb.DB;
-import site.ycsb.DBException;
-import site.ycsb.Status;
-import site.ycsb.StringByteIterator;
+import io.dingodb.sdk.common.Key;
+import io.dingodb.sdk.operation.Value;
+import io.dingodb.sdk.operation.op.Op;
+import io.dingodb.sdk.operation.result.CollectionOpResult;
+import site.ycsb.*;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.Vector;
+import java.util.*;
 
 /**
  * YCSB binding for <a href="https://www.dingodb.com">DingoDB</a>.
@@ -90,6 +86,10 @@ public class DingoDBClient extends DB {
   private static TableDefinition tableDefinition;
   private String defaultTableName;
 
+  private static final String DINGO_USER = System.getenv("DINGO_USER");
+  private static final  String DINGO_PWD = System.getenv("DINGO_PWD");
+
+
   public void init() throws DBException {
     Properties props = getProperties();
     String coordinatorList = props.getProperty(COORDINATOR_HOST);
@@ -97,6 +97,7 @@ public class DingoDBClient extends DB {
     defaultTableName = tableName;
 
     dingoClient = new DingoClient(coordinatorList);
+    dingoClient.setIdentity(DINGO_USER, DINGO_PWD);
     boolean isOK = dingoClient.open();
     if (!isOK) {
       throw new DBException("Init connection to coordinator:" + coordinatorList + " failed");
@@ -114,9 +115,17 @@ public class DingoDBClient extends DB {
                      String key,
                      Set<String> fields,
                      Map<String, ByteIterator> result) {
-    Object[] keyArray = new Object[1];
-    keyArray[0] = key;
-    Object[] values = dingoClient.get(defaultTableName, keyArray);
+//    Object[] keyArray = new Object[1];
+//    keyArray[0] = key;
+//    Object[] values = dingoClient.get(defaultTableName, keyArray);
+    Key key1=new Key(tableName, new ArrayList<>(Arrays.asList(Value.get(key))));
+    Op getRecord= Op.get(key1);
+    DingoOpResult dingoOpResult = dingoClient.exec(getRecord);
+
+    Iterator<Object[]> value = ((CollectionOpResult<Iterator<Object[]>>) dingoOpResult).getValue();
+
+
+    Object[] values=value.next();
 
     try {
       Map<String, String> resultInMap = convertRecord2HashMap(dingoClient, defaultTableName, values);
@@ -125,6 +134,7 @@ public class DingoDBClient extends DB {
       } else {
         Map<String, String> subResultMap = new HashMap<>();
         for (String columnName: fields) {
+          System.err.println("读结果是======="+resultInMap.get(columnName.toLowerCase()));
           subResultMap.put(columnName, resultInMap.get(columnName.toLowerCase()));
         }
         StringByteIterator.putAllAsByteIterators(result, subResultMap);
@@ -169,6 +179,7 @@ public class DingoDBClient extends DB {
       ex.printStackTrace();
       return Status.ERROR;
     }
+//    System.err.println("插入数据成功");
     return Status.OK;
   }
 
@@ -189,7 +200,16 @@ public class DingoDBClient extends DB {
                        Map<String, ByteIterator> values) {
     Map<String, String> inputValues = StringByteIterator.getStringMap(values);
 
-    Object[] originRecord = dingoClient.get(defaultTableName, Arrays.asList(key).toArray());
+    Key key1=new Key(tableName, new ArrayList<>(Arrays.asList(Value.get(key))));
+    Op getRecord= Op.get(key1);
+    DingoOpResult dingoOpResult = dingoClient.exec(getRecord);
+
+    Iterator<Object[]> value = ((CollectionOpResult<Iterator<Object[]>>) dingoOpResult).getValue();
+
+
+    Object[] originRecord=value.next();
+
+//    Object[] originRecord = dingoClient.get(defaultTableName, Arrays.asList(key).toArray());
     for (Map.Entry<String, String> entry: inputValues.entrySet()) {
       int index = tableDefinition.getColumnIndex(entry.getKey());
       if (index != -1) {
@@ -211,6 +231,10 @@ public class DingoDBClient extends DB {
                      int recordcount,
                      Set<String> fields,
                      Vector<HashMap<String, ByteIterator>> result) {
+
+
+//    Key startKey = new Key(tableName, Arrays.asList(Value.get(startkey)));
+
     return Status.OK;
   }
 

@@ -140,6 +140,7 @@ public final class DingoDBTableCommand {
     }
 
     DingoClient client = new DingoClient(coordinatorList);
+    client.setIdentity(System.getenv("DINGO_USER"), System.getenv("DINGO_PWD"));
     boolean isOK = client.open();
     if (!isOK) {
       throw new Exception("Create Connection to Coordinator[" + coordinatorList + "] failed");
@@ -160,7 +161,7 @@ public final class DingoDBTableCommand {
         null,
         null,
         true,
-        true,
+        0,
         generateRandomString(20));
     tableDef.addColumn(primaryColumn);
 
@@ -172,7 +173,7 @@ public final class DingoDBTableCommand {
           null,
           null,
           false,
-          false,
+          -1,
           null);
       tableDef.addColumn(column);
     }
