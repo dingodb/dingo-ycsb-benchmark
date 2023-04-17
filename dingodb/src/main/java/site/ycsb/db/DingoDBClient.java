@@ -24,17 +24,29 @@
 
 package site.ycsb.db;
 
-import io.dingodb.common.table.ColumnDefinition;
-import io.dingodb.common.table.TableDefinition;
-import io.dingodb.sdk.client.DingoClient;
+import com.google.common.collect.Maps;
+import io.dingodb.DingoClient;
+import io.dingodb.client.Key;
+import io.dingodb.client.Record;
+import io.dingodb.client.Value;
+import io.dingodb.common.Common;
+import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
+import io.dingodb.sdk.common.partition.PartitionRule;
+import io.dingodb.sdk.common.table.Column;
+import io.dingodb.sdk.common.table.ColumnDefinition;
+import io.dingodb.sdk.common.table.TableDefinition;
+import org.apache.commons.lang3.RandomStringUtils;
 import site.ycsb.ByteIterator;
 import site.ycsb.DB;
 import site.ycsb.DBException;
 import site.ycsb.Status;
 import site.ycsb.StringByteIterator;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -62,7 +74,7 @@ public class DingoDBClient extends DB {
   /** The field name prefix in the table. */
   public static final String COLUMN_PREFIX = "FIELD";
 
-  private DingoClient   dingoClient;
+  private DingoClient dingoClient;
 
   /**
    * command for table such as create or drop table.
@@ -96,12 +108,12 @@ public class DingoDBClient extends DB {
     String tableName = props.getProperty(DINGO_TABLE, DINGO_TABLE_DEFAULT);
     defaultTableName = tableName;
 
-    dingoClient = new DingoClient(coordinatorList);
+    dingoClient = new DingoClient(coordinatorList, 10);
     boolean isOK = dingoClient.open();
     if (!isOK) {
       throw new DBException("Init connection to coordinator:" + coordinatorList + " failed");
-    }
-    tableDefinition = dingoClient.getTableDefinition(tableName);
+    } 
+    tableDefinition = getTableDefinition(defaultTableName);
     System.out.println("=======Init Input Table===================>>>>" + tableName);
   }
 
@@ -114,12 +126,11 @@ public class DingoDBClient extends DB {
                      String key,
                      Set<String> fields,
                      Map<String, ByteIterator> result) {
-    Object[] keyArray = new Object[1];
-    keyArray[0] = key;
-    Object[] values = dingoClient.get(defaultTableName, keyArray);
+    Record record = dingoClient.get(defaultTableName, new Key(Arrays.asList(Value.get(key))));
+    Object[] values = record.getDingoColumnValuesInOrder();
 
     try {
-      Map<String, String> resultInMap = convertRecord2HashMap(dingoClient, defaultTableName, values);
+      Map<String, String> resultInMap = convertRecord2HashMap(values);
       if (fields == null) {
         StringByteIterator.putAllAsByteIterators(result, resultInMap);
       } else {
@@ -131,7 +142,7 @@ public class DingoDBClient extends DB {
       }
       return Status.OK;
     } catch (RuntimeException ex) {
-      System.out.println("Catch exception:" + ex.toString());
+      System.out.println("Catch exception:" + ex);
     }
     return Status.ERROR;
   }
@@ -141,31 +152,29 @@ public class DingoDBClient extends DB {
                        String key,
                        Map<String, ByteIterator> values) {
     Map<String, String> inputValues = StringByteIterator.getStringMap(values);
-    Object[] resultArray = new Object[values.size() + 1];
-
+    Map<String, Object> map = Maps.newLinkedHashMap();
     try {
-      TableDefinition tableDef = getTableDefinition(dingoClient, defaultTableName);
-      int index = 0;
-      for (ColumnDefinition column : tableDef.getColumns()) {
+      TableDefinition tableDef = getTableDefinition(defaultTableName);
+      for (Column column : tableDef.getColumns()) {
         String columnName = column.getName().toLowerCase();
         String columnValue = inputValues.get(columnName);
         if (columnValue == null) {
           columnValue = inputValues.get(columnName.toUpperCase());
         }
-
+        
         if (columnName.equalsIgnoreCase(PRIMARY_KEY)) {
+          columnName = PRIMARY_KEY;
           columnValue = key;
         }
-        resultArray[index] = columnValue;
-        index++;
+        map.put(columnName, columnValue);
       }
-
-      boolean isOK = dingoClient.insert(defaultTableName, resultArray);
+      
+      boolean isOK = dingoClient.upsert(defaultTableName, Collections.singletonList(new Record(PRIMARY_KEY, map)));
       if (!isOK) {
         System.out.println("Insert record using key:[" + key + "], failed");
       }
     } catch (Exception ex) {
-      System.out.println("Insert catch exception:" + ex.toString());
+      System.out.println("Insert catch exception:" + ex);
       ex.printStackTrace();
       return Status.ERROR;
     }
@@ -175,7 +184,7 @@ public class DingoDBClient extends DB {
   @Override
   public Status delete(String tableName,
                        String key) {
-    boolean isOK = dingoClient.delete(defaultTableName, Arrays.asList(key).toArray());
+    boolean isOK = dingoClient.delete(defaultTableName, new Key(Arrays.asList(Value.get(key))));
     if (!isOK) {
       System.out.println("delete record key:" + key + " failed");
       return Status.ERROR;
@@ -188,20 +197,27 @@ public class DingoDBClient extends DB {
                        String key,
                        Map<String, ByteIterator> values) {
     Map<String, String> inputValues = StringByteIterator.getStringMap(values);
-
-    Object[] originRecord = dingoClient.get(defaultTableName, Arrays.asList(key).toArray());
+    Record record = dingoClient.get(defaultTableName, new Key(Arrays.asList(Value.get(key))));
+    
+    Map<String, Object> newRecordMap = Maps.newLinkedHashMap();
+    Object[] originRecord = record.getDingoColumnValuesInOrder();
+    List<Column> cl = tableDefinition.getColumns();
     for (Map.Entry<String, String> entry: inputValues.entrySet()) {
-      int index = tableDefinition.getColumnIndex(entry.getKey());
-      if (index != -1) {
-        originRecord[index] = entry.getValue();
+      for (int i = 0; i< cl.size(); i++) {
+        if (cl.get(i).getName().equalsIgnoreCase(entry.getKey())) { 
+          originRecord[i] = entry.getValue();
+        }
+        newRecordMap.put(cl.get(i).getName(), originRecord[i]);
       }
     }
-
-    boolean isOK =  dingoClient.insert(defaultTableName, originRecord);
+    
+    boolean isOK = dingoClient.upsert(
+        defaultTableName, 
+        Collections.singletonList(new Record(PRIMARY_KEY, newRecordMap))
+    );
     if (isOK) {
       return Status.OK;
     }
-
     return Status.ERROR;
   }
 
@@ -213,33 +229,74 @@ public class DingoDBClient extends DB {
                      Vector<HashMap<String, ByteIterator>> result) {
     return Status.OK;
   }
-
-  private static Map<String, String> convertRecord2HashMap(DingoClient client,
-                                                           String tableName,
-                                                           Object[] columnValues) throws RuntimeException {
-    TableDefinition tblDef = getTableDefinition(client, tableName);
-
-    if (tblDef == null || tblDef.getColumnsCount() == 0) {
-      System.out.println("Invalid table definition:" + (tblDef == null ? "null" : "OK"));
+  
+  private static Map<String, String> convertRecord2HashMap(Object[] columnValues) {
+    if (tableDefinition == null || tableDefinition.getColumns().size() == 0) {
+      System.out.println("Invalid table definition:" + (tableDefinition == null ? "null" : "OK"));
       throw new RuntimeException("Table definition or Values is null");
     }
-
+    
     Map<String, String> result = new HashMap<>();
-    for (int i = 0; i < columnValues.length; i++) {
-      String columnName = tblDef.getColumn(i).getName();
+    for (int i =0; i < columnValues.length; i++) {
+      String columnName = tableDefinition.getColumn(i).getName();
       result.put(columnName.toLowerCase(), columnValues[i].toString());
     }
     return result;
   }
 
-  private static TableDefinition getTableDefinition(DingoClient client, String tableName) {
+  public static TableDefinition getTableDefinition(String tableName) {
 
     /**
      * as the benchmark is on a single table, so the tableDefinition is only one.
      */
     if (tableDefinition == null) {
-      tableDefinition = client.getTableDefinition(tableName);
+      List<Column> colDefList = new ArrayList<>();
+      final String defaultTypeName = "varchar";
+      ColumnDefinition primaryColumn = new ColumnDefinition(
+          DingoDBClient.PRIMARY_KEY,
+          defaultTypeName,
+          "",
+          0,
+          0,
+          false,
+          0,
+          generateRandomStr(20)
+      );
+      colDefList.add(primaryColumn);
+
+      int columnCnt = 10;
+      for (int i = 0; i < columnCnt; i++) {
+        ColumnDefinition colDef = new ColumnDefinition(
+            DingoDBClient.COLUMN_PREFIX + i,
+            defaultTypeName,
+            "",
+            0,
+            0,
+            true,
+            -1,
+            generateRandomStr(20)
+        );
+        colDefList.add(colDef);
+      }
+
+      PartitionDetailDefinition partitionDetailDefinition = new PartitionDetailDefinition(
+          null, null, Arrays.asList(new Object[]{"a"}));
+      PartitionRule partitionRule = new PartitionRule(
+          null, null, Arrays.asList(partitionDetailDefinition));
+
+      tableDefinition = new TableDefinition(
+          tableName,
+          colDefList,
+          1,
+          0,
+          partitionRule,
+          Common.Engine.ENG_ROCKSDB.name(),
+          null
+      );
     }
     return tableDefinition;
+  }
+  private static String generateRandomStr(int strLen) {
+    return RandomStringUtils.randomAlphanumeric(strLen);
   }
 }

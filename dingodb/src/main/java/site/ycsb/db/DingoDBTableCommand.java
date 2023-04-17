@@ -1,9 +1,13 @@
 package site.ycsb.db;
 
-import io.dingodb.common.table.ColumnDefinition;
-import io.dingodb.common.table.TableDefinition;
-import io.dingodb.sdk.client.DingoClient;
+import com.alibaba.fastjson.JSONObject;
+import io.dingodb.DingoClient;
+import io.dingodb.sdk.common.table.Column;
+import io.dingodb.sdk.common.table.TableDefinition;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
@@ -12,7 +16,6 @@ import java.util.Random;
  *
  */
 public final class DingoDBTableCommand {
-
   public static void main(String[] args) {
     if (args.length == 0) {
       usageMessage();
@@ -117,7 +120,7 @@ public final class DingoDBTableCommand {
     System.out.println("  -c   command=operation(default create, such as:"
             + DingoDBClient.DINGO_TBL_COMMAND+ "=create/drop)");
     System.out.println("  -p   key=value properties defined("
-        + DingoDBClient.COORDINATOR_HOST + "=172.20.31.10:19181)");
+        + DingoDBClient.COORDINATOR_HOST + "=172.20.3.13:22001)");
     System.out.println("  -n   name of the table.");
     System.out.println("  -f   number of fields (default 10).");
   }
@@ -139,51 +142,40 @@ public final class DingoDBTableCommand {
       throw new Exception("Missing connection information.");
     }
 
-    DingoClient client = new DingoClient(coordinatorList);
-    boolean isOK = client.open();
+    DingoClient dingoClient = new DingoClient(coordinatorList, 10);
+    
+    boolean isOK = dingoClient.open();
     if (!isOK) {
       throw new Exception("Create Connection to Coordinator[" + coordinatorList + "] failed");
     }
 
     boolean isDropTable = (0 == tableCommand.compareToIgnoreCase(DingoDBClient.DINGO_TBL_COMMAND_DROP));
     if (isDropTable) {
-      client.dropTable(tableName);
+      dingoClient.dropTable(tableName);
       return;
     }
+    TableDefinition tableDef = DingoDBClient.getTableDefinition(tableName);
+    
+    System.out.println("=========================================================");
+    System.out.println(toJson(tableDef));
+    System.out.println("=========================================================");
 
-    final String defaultTypeName = "varchar".toUpperCase();
-    TableDefinition tableDef = new TableDefinition(tableName);
-    ColumnDefinition primaryColumn = ColumnDefinition.getInstance(
-        DingoDBClient.PRIMARY_KEY,
-        defaultTypeName,
-        null,
-        null,
-        null,
-        true,
-        true,
-        generateRandomString(20));
-    tableDef.addColumn(primaryColumn);
+    boolean createStatus = dingoClient.createTable(tableDef);
+    if (!createStatus) {
+      System.out.println("create table failed!");
+    } 
+    dingoClient.close();
+  }
 
-    for (int i = 0; i < columnCnt; i++) {
-      ColumnDefinition column = ColumnDefinition.getInstance(
-          DingoDBClient.COLUMN_PREFIX + i,
-          defaultTypeName,
-          null,
-          null,
-          null,
-          false,
-          false,
-          null);
-      tableDef.addColumn(column);
+  //definition转json
+  public static String toJson(TableDefinition tableDefinition) {
+    Map<String, Object> defMap = new LinkedHashMap<>();
+    List<Column> cl = tableDefinition.getColumns();
+    for (Column column : cl) {
+      defMap.put(column.getName(), column.getType());
     }
-
-    System.out.println("=========================================================");
-    System.out.println(tableDef.toJson());
-    System.out.println("=========================================================");
-
-    client.createTable(tableDef);
-    client.close();
-    return;
+    JSONObject jsonObject = new JSONObject(defMap);
+    return jsonObject.toJSONString();
   }
 
   private static String generateRandomString(int expectedLen) {
