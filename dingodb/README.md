@@ -21,7 +21,7 @@ This section describes how to run YCSB on [DingoDB](https://github.com/dingodb/d
 
 ### 1. Start DingoCluster
 
-### 2. Install Java and Maven
+### 2. Install Java, Maven and Python 2.7
 
 ### 3. Set Up YCSB
 
@@ -67,7 +67,7 @@ Set coordinator host list and table name  in the workload you plan to run.
 Or, you can set configs with the shell command, EG:
 
 ```shell
-    ./bin/ycsb load dingodb -s -P workloads/workloada -p "coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181" -p "dingo.table=usertable" > outputLoad.txt
+    python ./bin/ycsb load dingodb -s -P workloads/workloada -p "coordinator.host=172.20.361.101:22001" -p "dingo.table=usertable" > outputLoad.txt
 ```
 
 ### 6. Load data and run tests 
@@ -75,11 +75,11 @@ Or, you can set configs with the shell command, EG:
 Load the data:
 
 ```shell
-    ./bin/ycsb load dingodb -s -P workloads/workloada -p "coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181" -p "dingo.table=usertable" > outputLoad.txt
+    python ./bin/ycsb load dingodb -s -P workloads/workloada -p "coordinator.host=172.20.61.101:22001" -p "dingo.table=usertable" > outputLoad.txt
 ```
 
 Run the workload test:
 
 ```shell
-   ./bin/ycsb run dingodb -s -P workloads/workloada -p "coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181" -p "dingo.table=usertable"
+   python ./bin/ycsb run dingodb -s -P workloads/workloada -p "coordinator.host=172.20.61.101:19181" -p "dingo.table=usertable"
 ```
