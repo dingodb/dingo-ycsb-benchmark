@@ -28,7 +28,7 @@ This section describes how to run YCSB on [DingoDB](https://github.com/dingodb/d
 Git clone YCSB and compile:
 
 ```shell
-    git clone http://github.com/brianfrankcooper/YCSB.git
+    git clone https://github.com/dingodb/dingo-ycsb-benchmark.git
     cd YCSB
     mvn -pl site.ycsb:dingodb-binding -am clean package
 ```
@@ -46,14 +46,14 @@ Git clone YCSB and compile:
 
 - execute command to create table
 ```shell
-java -cp "lib/*" site.ycsb.db.DingoDBTableCommand -c command=create -p coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181 -n bench1 -f 10
+java -cp "lib/*" site.ycsb.db.DingoDBTableCommand -c command=create -p coordinator.host=172.20.61.101:22001 -n bench1 -f 10
 ```
 
 #### 4.3 Other commands
 
 If you want to drop table, you can use command as follows:
 ```shell
-java -cp "lib/*" site.ycsb.db.DingoDBTableCommand -c command=drop -p coordinator.host=172.20.31.10:19181,172.20.31.11:19181,172.20.31.12:19181 -n bench1
+java -cp "lib/*" site.ycsb.db.DingoDBTableCommand -c command=drop -p coordinator.host=172.20.61.101:22001 -n bench1
 ```
 
 ### 5. Provide DingoDB Connection Parameters
@@ -67,7 +67,7 @@ Set coordinator host list and table name  in the workload you plan to run.
 Or, you can set configs with the shell command, EG:
 
 ```shell
-    python ./bin/ycsb load dingodb -s -P workloads/workloada -p "coordinator.host=172.20.361.101:22001" -p "dingo.table=usertable" > outputLoad.txt
+    python ./bin/ycsb load dingodb -s -P workloads/workloada -p "coordinator.host=172.20.61.101:22001" -p "dingo.table=usertable" > outputLoad.txt
 ```
 
 ### 6. Load data and run tests 
@@ -81,5 +81,5 @@ Load the data:
 Run the workload test:
 
 ```shell
-   python ./bin/ycsb run dingodb -s -P workloads/workloada -p "coordinator.host=172.20.61.101:19181" -p "dingo.table=usertable"
+   python ./bin/ycsb run dingodb -s -P workloads/workloada -p "coordinator.host=172.20.61.101:22001" -p "dingo.table=usertable"
 ```
