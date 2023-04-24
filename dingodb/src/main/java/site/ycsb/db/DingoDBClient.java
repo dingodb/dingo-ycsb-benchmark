@@ -44,13 +44,14 @@ import site.ycsb.StringByteIterator;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * YCSB binding for <a href="https://www.dingodb.com">DingoDB</a>.
@@ -58,6 +59,8 @@ import java.util.Vector;
  * See {@code dingodb/README.md} for details.
  */
 public class DingoDBClient extends DB {
+  
+  private static final AtomicInteger THREAD_COUNT = new AtomicInteger(0);
 
   /** The name of the property for the number of fields in a record. */
   public static final String FIELD_COUNT_PROPERTY = "fieldcount";
@@ -74,7 +77,10 @@ public class DingoDBClient extends DB {
   /** The field name prefix in the table. */
   public static final String COLUMN_PREFIX = "FIELD";
 
-  private DingoClient dingoClient;
+  /**
+   * A singoton Dingo instance.
+   */
+  private static DingoClient dingoClient;
 
   /**
    * command for table such as create or drop table.
@@ -100,25 +106,55 @@ public class DingoDBClient extends DB {
   public static final String DINGO_TABLE = "dingo.table";
 
   private static TableDefinition tableDefinition;
-  private String defaultTableName;
+  private static String defaultTableName;
+  private static int columnCnt;
 
+  @Override
   public void init() throws DBException {
-    Properties props = getProperties();
-    String coordinatorList = props.getProperty(COORDINATOR_HOST);
-    String tableName = props.getProperty(DINGO_TABLE, DINGO_TABLE_DEFAULT);
-    defaultTableName = tableName;
+    THREAD_COUNT.incrementAndGet();
+    synchronized (THREAD_COUNT) {
+      if (dingoClient != null) {
+        return;
+      }
+      
+      Properties props = getProperties();
+      String coordinatorList = props.getProperty(COORDINATOR_HOST);
+      String tableName = props.getProperty(DINGO_TABLE, DINGO_TABLE_DEFAULT);
+      defaultTableName = tableName;
+      
+      dingoClient = new DingoClient(coordinatorList, 100);
+      boolean isOK = dingoClient.open();
+      if (!isOK) {
+        throw new DBException("Init connection to coordinator:" + coordinatorList + " failed");
+      }
 
-    dingoClient = new DingoClient(coordinatorList, 10);
-    boolean isOK = dingoClient.open();
-    if (!isOK) {
-      throw new DBException("Init connection to coordinator:" + coordinatorList + " failed");
-    } 
-    tableDefinition = getTableDefinition(defaultTableName);
-    System.out.println("=======Init Input Table===================>>>>" + tableName);
+      columnCnt = Integer.parseInt(
+          props.getProperty(
+              DingoDBClient.FIELD_COUNT_PROPERTY,
+              DingoDBClient.FIELD_COUNT_PROPERTY_DEFAULT
+          )
+      );
+      tableDefinition = getTableDefinition(defaultTableName);
+      System.out.println("=======Init Input Table===================>>>>" + tableName);
+    }
   }
 
+  @Override
   public void cleanup() throws DBException {
-    dingoClient.close();
+    synchronized (THREAD_COUNT) {
+      if (THREAD_COUNT.decrementAndGet() <= 0) {
+        try {
+          if (dingoClient != null) {
+            dingoClient.close();
+          }
+        } catch (Exception e) {
+          System.err.println("Could not close DingoDB connection pool: " + e.toString());
+          e.printStackTrace();
+        } finally {
+          dingoClient = null;
+        }
+      }
+    }
   }
 
   @Override
@@ -130,11 +166,11 @@ public class DingoDBClient extends DB {
     Object[] values = record.getDingoColumnValuesInOrder();
 
     try {
-      Map<String, String> resultInMap = convertRecord2HashMap(values);
+      LinkedHashMap<String, String> resultInMap = convertRecord2HashMap(values);
       if (fields == null) {
         StringByteIterator.putAllAsByteIterators(result, resultInMap);
       } else {
-        Map<String, String> subResultMap = new HashMap<>();
+        LinkedHashMap<String, String> subResultMap = new LinkedHashMap<>();
         for (String columnName: fields) {
           subResultMap.put(columnName, resultInMap.get(columnName.toLowerCase()));
         }
@@ -152,7 +188,7 @@ public class DingoDBClient extends DB {
                        String key,
                        Map<String, ByteIterator> values) {
     Map<String, String> inputValues = StringByteIterator.getStringMap(values);
-    Map<String, Object> map = Maps.newLinkedHashMap();
+    LinkedHashMap<String, Object> map = Maps.newLinkedHashMap();
     try {
       TableDefinition tableDef = getTableDefinition(defaultTableName);
       for (Column column : tableDef.getColumns()) {
@@ -169,7 +205,7 @@ public class DingoDBClient extends DB {
         map.put(columnName, columnValue);
       }
       
-      boolean isOK = dingoClient.upsert(defaultTableName, Collections.singletonList(new Record(PRIMARY_KEY, map)));
+      boolean isOK = dingoClient.upsert(defaultTableName, new Record(PRIMARY_KEY, map));
       if (!isOK) {
         System.out.println("Insert record using key:[" + key + "], failed");
       }
@@ -199,7 +235,7 @@ public class DingoDBClient extends DB {
     Map<String, String> inputValues = StringByteIterator.getStringMap(values);
     Record record = dingoClient.get(defaultTableName, new Key(Arrays.asList(Value.get(key))));
     
-    Map<String, Object> newRecordMap = Maps.newLinkedHashMap();
+    LinkedHashMap<String, Object> newRecordMap = Maps.newLinkedHashMap();
     Object[] originRecord = record.getDingoColumnValuesInOrder();
     List<Column> cl = tableDefinition.getColumns();
     for (Map.Entry<String, String> entry: inputValues.entrySet()) {
@@ -213,7 +249,7 @@ public class DingoDBClient extends DB {
     
     boolean isOK = dingoClient.upsert(
         defaultTableName, 
-        Collections.singletonList(new Record(PRIMARY_KEY, newRecordMap))
+        new Record(PRIMARY_KEY, newRecordMap)
     );
     if (isOK) {
       return Status.OK;
@@ -230,13 +266,13 @@ public class DingoDBClient extends DB {
     return Status.OK;
   }
   
-  private static Map<String, String> convertRecord2HashMap(Object[] columnValues) {
+  private static LinkedHashMap<String, String> convertRecord2HashMap(Object[] columnValues) {
     if (tableDefinition == null || tableDefinition.getColumns().size() == 0) {
       System.out.println("Invalid table definition:" + (tableDefinition == null ? "null" : "OK"));
       throw new RuntimeException("Table definition or Values is null");
     }
     
-    Map<String, String> result = new HashMap<>();
+    LinkedHashMap<String, String> result = new LinkedHashMap<>();
     for (int i =0; i < columnValues.length; i++) {
       String columnName = tableDefinition.getColumn(i).getName();
       result.put(columnName.toLowerCase(), columnValues[i].toString());
@@ -263,8 +299,7 @@ public class DingoDBClient extends DB {
           generateRandomStr(20)
       );
       colDefList.add(primaryColumn);
-
-      int columnCnt = 10;
+      
       for (int i = 0; i < columnCnt; i++) {
         ColumnDefinition colDef = new ColumnDefinition(
             DingoDBClient.COLUMN_PREFIX + i,
@@ -289,7 +324,7 @@ public class DingoDBClient extends DB {
           colDefList,
           1,
           0,
-          partitionRule,
+          null,
           Common.Engine.ENG_ROCKSDB.name(),
           null
       );

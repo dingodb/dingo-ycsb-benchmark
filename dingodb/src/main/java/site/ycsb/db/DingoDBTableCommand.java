@@ -2,14 +2,20 @@ package site.ycsb.db;
 
 import com.alibaba.fastjson.JSONObject;
 import io.dingodb.DingoClient;
+import io.dingodb.common.Common;
+import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
+import io.dingodb.sdk.common.partition.PartitionRule;
 import io.dingodb.sdk.common.table.Column;
+import io.dingodb.sdk.common.table.ColumnDefinition;
 import io.dingodb.sdk.common.table.TableDefinition;
+import org.apache.commons.lang3.RandomStringUtils;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
 
 /**
  * Class to create table in dingoDB cluster to be used by the benchmark.
@@ -154,7 +160,49 @@ public final class DingoDBTableCommand {
       dingoClient.dropTable(tableName);
       return;
     }
-    TableDefinition tableDef = DingoDBClient.getTableDefinition(tableName);
+//    TableDefinition tableDef = DingoDBClient.getTableDefinition(tableName);
+    List<Column> colDefList = new ArrayList<>();
+    final String defaultTypeName = "varchar";
+    ColumnDefinition primaryColumn = new ColumnDefinition(
+        DingoDBClient.PRIMARY_KEY,
+        defaultTypeName,
+        "",
+        0,
+        0,
+        false,
+        0,
+        generateRandomStr(20)
+    );
+    colDefList.add(primaryColumn);
+
+    for (int i = 0; i < columnCnt; i++) {
+      ColumnDefinition colDef = new ColumnDefinition(
+          DingoDBClient.COLUMN_PREFIX + i,
+          defaultTypeName,
+          "",
+          0,
+          0,
+          true,
+          -1,
+          generateRandomStr(20)
+      );
+      colDefList.add(colDef);
+    }
+
+    PartitionDetailDefinition partitionDetailDefinition = new PartitionDetailDefinition(
+        null, null, Arrays.asList(new Object[]{"a"}));
+    PartitionRule partitionRule = new PartitionRule(
+        null, null, Arrays.asList(partitionDetailDefinition));
+
+    TableDefinition tableDef = new TableDefinition(
+        tableName,
+        colDefList,
+        1,
+        0,
+        null,
+        Common.Engine.ENG_ROCKSDB.name(),
+        null
+    );
     
     System.out.println("=========================================================");
     System.out.println(toJson(tableDef));
@@ -178,20 +226,24 @@ public final class DingoDBTableCommand {
     return jsonObject.toJSONString();
   }
 
-  private static String generateRandomString(int expectedLen) {
-    // letter 'a'
-    int leftLimit = 97;
-    // letter 'z'
-    int rightLimit = 122;
-    Random random = new Random();
-
-    String generatedString = random
-        .ints(leftLimit, rightLimit + 1)
-        .limit(expectedLen)
-        .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
-        .toString();
-    return generatedString;
+  private static String generateRandomStr(int strLen) {
+    return RandomStringUtils.randomAlphanumeric(strLen);
   }
+
+//  private static String generateRandomString(int expectedLen) {
+//    // letter 'a'
+//    int leftLimit = 97;
+//    // letter 'z'
+//    int rightLimit = 122;
+//    Random random = new Random();
+//
+//    String generatedString = random
+//        .ints(leftLimit, rightLimit + 1)
+//        .limit(expectedLen)
+//        .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+//        .toString();
+//    return generatedString;
+//  }
 
   private DingoDBTableCommand() {
     super();
