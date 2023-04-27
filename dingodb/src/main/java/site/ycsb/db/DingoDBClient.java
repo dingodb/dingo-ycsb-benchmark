@@ -296,7 +296,8 @@ public class DingoDBClient extends DB {
           0,
           false,
           0,
-          generateRandomStr(20)
+          generateRandomStr(20),
+          false
       );
       colDefList.add(primaryColumn);
       
@@ -309,7 +310,8 @@ public class DingoDBClient extends DB {
             0,
             true,
             -1,
-            generateRandomStr(20)
+            generateRandomStr(20),
+            false
         );
         colDefList.add(colDef);
       }
