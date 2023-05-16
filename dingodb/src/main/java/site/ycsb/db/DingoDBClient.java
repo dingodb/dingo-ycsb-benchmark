@@ -321,15 +321,25 @@ public class DingoDBClient extends DB {
       PartitionRule partitionRule = new PartitionRule(
           null, null, Arrays.asList(partitionDetailDefinition));
 
-      tableDefinition = new TableDefinition(
-          tableName,
-          colDefList,
-          1,
-          0,
-          null,
-          Common.Engine.ENG_ROCKSDB.name(),
-          null
-      );
+//      tableDefinition = new TableDefinition(
+//          tableName,
+//          colDefList,
+//          1,
+//          0,
+//          null,
+//          Common.Engine.ENG_ROCKSDB.name(),
+//          null
+//      );
+      tableDefinition = TableDefinition.builder()
+          .name(tableName)
+          .columns(colDefList)
+          .version(1)
+          .ttl(0)
+          .partition(null)
+          .engine(Common.Engine.ENG_ROCKSDB.name())
+          .replica(3)
+          .createSql("")
+          .build();
     }
     return tableDefinition;
   }

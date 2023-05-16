@@ -196,15 +196,26 @@ public final class DingoDBTableCommand {
     PartitionRule partitionRule = new PartitionRule(
         null, null, Arrays.asList(partitionDetailDefinition));
 
-    TableDefinition tableDef = new TableDefinition(
-        tableName,
-        colDefList,
-        1,
-        0,
-        null,
-        Common.Engine.ENG_ROCKSDB.name(),
-        null
-    );
+//    TableDefinition tableDef = new TableDefinition(
+//        tableName,
+//        colDefList,
+//        1,
+//        0,
+//        null,
+//        Common.Engine.ENG_ROCKSDB.name(),
+//        null
+//    );
+    
+    TableDefinition tableDef = TableDefinition.builder()
+        .name(tableName)
+        .columns(colDefList)
+        .version(1)
+        .ttl(0)
+        .partition(null)
+        .engine(Common.Engine.ENG_ROCKSDB.name())
+        .replica(3)
+        .createSql("")
+        .build();
     
     System.out.println("=========================================================");
     System.out.println(toJson(tableDef));
