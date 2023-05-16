@@ -280,7 +280,7 @@ public class DingoDBClient extends DB {
     return result;
   }
 
-  public static TableDefinition getTableDefinition(String tableName) {
+  private static TableDefinition getTableDefinition(String tableName) {
 
     /**
      * as the benchmark is on a single table, so the tableDefinition is only one.
