@@ -1,7 +1,7 @@
 package site.ycsb.db;
 
 import com.alibaba.fastjson.JSONObject;
-import io.dingodb.DingoClient;
+import io.dingodb.client.DingoClient;
 import io.dingodb.common.Common;
 import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
 import io.dingodb.sdk.common.partition.PartitionRule;

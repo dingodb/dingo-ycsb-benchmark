@@ -25,10 +25,10 @@
 package site.ycsb.db;
 
 import com.google.common.collect.Maps;
-import io.dingodb.DingoClient;
-import io.dingodb.client.Key;
-import io.dingodb.client.Record;
-import io.dingodb.client.Value;
+import io.dingodb.client.DingoClient;
+import io.dingodb.client.common.Key;
+import io.dingodb.client.common.Record;
+import io.dingodb.client.common.Value;
 import io.dingodb.common.Common;
 import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
 import io.dingodb.sdk.common.partition.PartitionRule;
