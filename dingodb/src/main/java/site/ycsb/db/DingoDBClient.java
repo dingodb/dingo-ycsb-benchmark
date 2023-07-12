@@ -24,7 +24,6 @@
 
 package site.ycsb.db;
 
-import com.google.common.collect.Maps;
 import io.dingodb.client.DingoClient;
 import io.dingodb.client.common.Key;
 import io.dingodb.client.common.Record;
@@ -188,10 +187,12 @@ public class DingoDBClient extends DB {
                        String key,
                        Map<String, ByteIterator> values) {
     Map<String, String> inputValues = StringByteIterator.getStringMap(values);
-    LinkedHashMap<String, Object> map = Maps.newLinkedHashMap();
+//    LinkedHashMap<String, Object> map = Maps.newLinkedHashMap();
     try {
       TableDefinition tableDef = getTableDefinition(defaultTableName);
-      for (Column column : tableDef.getColumns()) {
+      List<Column> colList = tableDef.getColumns();
+      List<Object> recordList = new ArrayList<>();
+      for (Column column : colList) {
         String columnName = column.getName().toLowerCase();
         String columnValue = inputValues.get(columnName);
         if (columnValue == null) {
@@ -199,13 +200,15 @@ public class DingoDBClient extends DB {
         }
         
         if (columnName.equalsIgnoreCase(PRIMARY_KEY)) {
-          columnName = PRIMARY_KEY;
+//          columnName = PRIMARY_KEY;
           columnValue = key;
         }
-        map.put(columnName, columnValue);
+//        map.put(columnName, columnValue);
+        recordList.add(columnValue);
       }
       
-      boolean isOK = dingoClient.upsert(defaultTableName, new Record(PRIMARY_KEY, map));
+//      boolean isOK = dingoClient.upsert(defaultTableName, new Record(PRIMARY_KEY, map));
+      boolean isOK = dingoClient.upsert(defaultTableName, new Record(colList, recordList));
       if (!isOK) {
         System.out.println("Insert record using key:[" + key + "], failed");
       }
@@ -235,22 +238,37 @@ public class DingoDBClient extends DB {
     Map<String, String> inputValues = StringByteIterator.getStringMap(values);
     Record record = dingoClient.get(defaultTableName, new Key(Arrays.asList(Value.get(key))));
     
-    LinkedHashMap<String, Object> newRecordMap = Maps.newLinkedHashMap();
+//    LinkedHashMap<String, Object> newRecordMap = Maps.newLinkedHashMap();
+//    Object[] originRecord = record.getDingoColumnValuesInOrder();
+//    List<Column> cl = tableDefinition.getColumns();
+//    for (Map.Entry<String, String> entry: inputValues.entrySet()) {
+//      for (int i = 0; i< cl.size(); i++) {
+//        if (cl.get(i).getName().equalsIgnoreCase(entry.getKey())) { 
+//          originRecord[i] = entry.getValue();
+//        }
+//        newRecordMap.put(cl.get(i).getName(), originRecord[i]);
+//      }
+//    }
+//    
+//    boolean isOK = dingoClient.upsert(
+//        defaultTableName, 
+//        new Record(PRIMARY_KEY, newRecordMap)
+//    );
+    
     Object[] originRecord = record.getDingoColumnValuesInOrder();
-    List<Column> cl = tableDefinition.getColumns();
+    List<Column> colList = tableDefinition.getColumns();
+    List<Object> recordList = new ArrayList<>();
+    
     for (Map.Entry<String, String> entry: inputValues.entrySet()) {
-      for (int i = 0; i< cl.size(); i++) {
-        if (cl.get(i).getName().equalsIgnoreCase(entry.getKey())) { 
+      for (int i = 0; i< colList.size(); i++) {
+        if (colList.get(i).getName().equalsIgnoreCase(entry.getKey())) {
           originRecord[i] = entry.getValue();
         }
-        newRecordMap.put(cl.get(i).getName(), originRecord[i]);
+        recordList.add(originRecord[i]);
       }
     }
     
-    boolean isOK = dingoClient.upsert(
-        defaultTableName, 
-        new Record(PRIMARY_KEY, newRecordMap)
-    );
+    boolean isOK = dingoClient.upsert(defaultTableName, new Record(colList, recordList));
     if (isOK) {
       return Status.OK;
     }
