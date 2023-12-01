@@ -163,31 +163,51 @@ public final class DingoDBTableCommand {
 //    TableDefinition tableDef = DingoDBClient.getTableDefinition(tableName);
     List<Column> colDefList = new ArrayList<>();
     final String defaultTypeName = "varchar";
-    ColumnDefinition primaryColumn = new ColumnDefinition(
-        DingoDBClient.PRIMARY_KEY,
-        defaultTypeName,
-        "",
-        -1,
-        1,
-        false,
-        0,
-        generateRandomStr(20),
-        false
-    );
+//    ColumnDefinition primaryColumn = new ColumnDefinition(
+//        DingoDBClient.PRIMARY_KEY,
+//        defaultTypeName,
+//        "",
+//        -1,
+//        1,
+//        false,
+//        0,
+//        generateRandomStr(20),
+//        false
+//    );
+    ColumnDefinition primaryColumn = ColumnDefinition.builder()
+        .name(DingoDBClient.PRIMARY_KEY)
+        .type(defaultTypeName)
+        .precision(-1)
+        .scale(1)
+        .nullable(false)
+        .primary(0)
+        .defaultValue(generateRandomStr(20))
+        .isAutoIncrement(false)
+        .build();
     colDefList.add(primaryColumn);
 
     for (int i = 0; i < columnCnt; i++) {
-      ColumnDefinition colDef = new ColumnDefinition(
-          DingoDBClient.COLUMN_PREFIX + i,
-          defaultTypeName,
-          "",
-          -1,
-          1,
-          true,
-          -1,
-          generateRandomStr(20),
-          false
-      );
+//      ColumnDefinition colDef = new ColumnDefinition(
+//          DingoDBClient.COLUMN_PREFIX + i,
+//          defaultTypeName,
+//          "",
+//          -1,
+//          1,
+//          true,
+//          -1,
+//          generateRandomStr(20),
+//          false
+//      );
+      ColumnDefinition colDef = ColumnDefinition.builder()
+          .name(DingoDBClient.COLUMN_PREFIX + i)
+          .type(defaultTypeName)
+          .precision(-1)
+          .scale(1)
+          .nullable(true)
+          .primary(-1)
+          .defaultValue(generateRandomStr(20))
+          .isAutoIncrement(false)
+          .build();
       colDefList.add(colDef);
     }
 
