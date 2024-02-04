@@ -232,7 +232,7 @@ public final class DingoDBTableCommand {
         .version(1)
         .ttl(0)
         .partition(null)
-        .engine(Common.Engine.ENG_ROCKSDB.name())
+        .engine(Common.Engine.LSM.name())
         .replica(3)
         .createSql("")
         .build();
